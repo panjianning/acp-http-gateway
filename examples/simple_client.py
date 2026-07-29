@@ -273,13 +273,17 @@ class AcpHttpClient:
                         print("[prompt] → approved")
             else:
                 params = event.get("params", {})
-                update = params.get("sessionUpdate", "")
-                if "message" in params:
-                    content = params["message"].get("content", "")
-                    if isinstance(content, str):
-                        print(f"[prompt] ← {content}")
-                elif update:
-                    pass  # suppress detail for readability
+                upd = params.get("update", {})
+                su = upd.get("sessionUpdate", "")
+                content = upd.get("content", {})
+                if isinstance(content, dict) and "text" in content:
+                    if su == "agent_message_chunk":
+                        sys.stdout.write(content["text"])
+                        sys.stdout.flush()
+                    elif su == "user_message_chunk":
+                        pass  # user messages are echoes
+                    elif su == "tool_call":
+                        print(f"\n[tool] {content.get('title', '?')}")
 
     async def cancel(self) -> None:
         """Cancel the current turn."""
