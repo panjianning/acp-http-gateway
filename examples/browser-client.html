@@ -159,42 +159,42 @@
     }
 
     function handleSSEEvent(msg) {
-      // 1. session/new or session/load response — capture sessionId
+      // 1. session/new or session/load — capture sessionId
       if (msg.result?.sessionId && !sessionId) {
         sessionId = msg.result.sessionId;
         addMsg('system', 'Session ready: ' + sessionId);
         return;
       }
 
-      // 2. End of turn
-      if (msg.result && msg.id) {
-        addMsg('system', 'Turn complete (stopReason=' + (msg.result.stopReason || '?') + ')');
-        return;
-      }
+      // 2. Permission request — auto-approve
+      if (msg.method === 'request_permission') {
         const tool = msg.params?.toolCall;
         addMsg('system', '⚠ Permission requested: ' + (tool?.title || '?'));
-
-        // Auto-approve for demo
         const approval = {
           jsonrpc: '2.0',
           id: msg.id,
           result: { outcome: 'allow_once' }
         };
-        const headers = baseHeaders();
-        if (sessionId) headers['Acp-Session-Id'] = sessionId;
+        const hdrs = baseHeaders();
+        if (sessionId) hdrs['Acp-Session-Id'] = sessionId;
         fetch($('gateway-url').value + '/acp', {
           method: 'POST',
-          headers,
+          headers: hdrs,
           body: JSON.stringify(approval)
         });
         return;
       }
 
-      // Agent message chunks (pi-acp uses params.update.content)
+      // 3. End of turn
+      if (msg.result && msg.id) {
+        addMsg('system', 'Turn complete (stopReason=' + (msg.result.stopReason || '?') + ')');
+        return;
+      }
+
+      // 4. Agent message chunks
       const upd = (msg.params || {}).update || {};
-      const content = upd.content;
-      if (upd.sessionUpdate === 'agent_message_chunk' && content?.text) {
-        addMsg('agent', content.text);
+      if (upd.sessionUpdate === 'agent_message_chunk' && upd.content?.text) {
+        addMsg('agent', upd.content.text);
       }
     }
 
