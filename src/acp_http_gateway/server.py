@@ -208,6 +208,9 @@ def create_app(
                 }
                 if cors_origin:
                     headers["Access-Control-Allow-Origin"] = cors_origin
+                    headers["Access-Control-Expose-Headers"] = (
+                        f"{HEADER_CONNECTION_ID}, {HEADER_SESSION_ID}"
+                    )
 
             return web.json_response(response, status=200, headers=headers)
 
