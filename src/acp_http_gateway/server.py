@@ -274,7 +274,7 @@ def create_app(
         conn.sse_queues[session_id] = queue
         done = asyncio.Event()
 
-        resp = await sse_response(request, queue, done)
+        resp = await sse_response(request, queue, done, cors_origin)
 
         try:
             await write_sse_stream(resp, queue, done)

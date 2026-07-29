@@ -421,3 +421,18 @@ async def test_auth_authorized(auth_base_url, session):
         headers={"Authorization": "Bearer sk-test"},
     ) as resp:
         assert resp.status == 200
+
+
+@pytest.mark.asyncio
+async def test_sse_cors_header(base_url, session):
+    """GET /acp returns Access-Control-Allow-Origin."""
+    conn_id = await _initialize(session, base_url)
+    async with session.get(
+        f"{base_url}/acp",
+        headers={
+            "Accept": "text/event-stream",
+            HEADER_CONNECTION_ID: conn_id,
+        },
+    ) as resp:
+        assert resp.status == 200
+        assert resp.headers.get("Access-Control-Allow-Origin") == "*"

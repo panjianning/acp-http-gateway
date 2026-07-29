@@ -119,6 +119,7 @@ async def sse_response(
     request: web.Request,
     queue: asyncio.Queue[dict[str, Any]],
     done: asyncio.Event,
+    cors_origin: str | None = None,
 ) -> web.StreamResponse:
     """Create and prepare an SSE :class:`~aiohttp.web.StreamResponse`.
 
@@ -126,6 +127,7 @@ async def sse_response(
         request: The incoming GET request.
         queue: Message queue for this stream.
         done: Signal for termination.
+        cors_origin: If set, added as ``Access-Control-Allow-Origin``.
 
     Returns:
         A prepared :class:`~aiohttp.web.StreamResponse` ready to be used
@@ -139,6 +141,7 @@ async def sse_response(
             "Cache-Control": "no-cache",
             "Connection": "keep-alive",
             "X-Accel-Buffering": "no",  # Disable nginx buffering
+            **({"Access-Control-Allow-Origin": cors_origin} if cors_origin else {}),
         },
     )
     await resp.prepare(request)
