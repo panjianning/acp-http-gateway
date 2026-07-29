@@ -159,14 +159,18 @@
     }
 
     function handleSSEEvent(msg) {
-      // Check for prompt response (end of turn)
+      // 1. session/new or session/load response — capture sessionId
+      if (msg.result?.sessionId && !sessionId) {
+        sessionId = msg.result.sessionId;
+        addMsg('system', 'Session ready: ' + sessionId);
+        return;
+      }
+
+      // 2. End of turn
       if (msg.result && msg.id) {
         addMsg('system', 'Turn complete (stopReason=' + (msg.result.stopReason || '?') + ')');
         return;
       }
-
-      // Check for permission request
-      if (msg.method === 'request_permission') {
         const tool = msg.params?.toolCall;
         addMsg('system', '⚠ Permission requested: ' + (tool?.title || '?'));
 
@@ -183,13 +187,6 @@
           headers,
           body: JSON.stringify(approval)
         });
-        return;
-      }
-
-      // Check for session/new response
-      if (msg.result?.sessionId && !sessionId) {
-        sessionId = msg.result.sessionId;
-        addMsg('system', 'Session created: ' + sessionId);
         return;
       }
 
