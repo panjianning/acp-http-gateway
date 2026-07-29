@@ -272,18 +272,12 @@ class AcpHttpClient:
                     if r.status == 202:
                         print("[prompt] → approved")
             else:
-                params = event.get("params", {})
-                upd = params.get("update", {})
-                su = upd.get("sessionUpdate", "")
-                content = upd.get("content", {})
-                if isinstance(content, dict) and "text" in content:
-                    if su == "agent_message_chunk":
-                        sys.stdout.write(content["text"])
-                        sys.stdout.flush()
-                    elif su == "user_message_chunk":
-                        pass  # user messages are echoes
-                    elif su == "tool_call":
-                        print(f"\n[tool] {content.get('title', '?')}")
+                # Dump raw event — the client is just a demo, don't parse
+                su = event.get("params", {}).get("update", {}).get("sessionUpdate", "")
+                if su == "agent_message_chunk":
+                    text = event["params"]["update"]["content"].get("text", "")
+                    sys.stdout.write(text)
+                    sys.stdout.flush()
 
     async def cancel(self) -> None:
         """Cancel the current turn."""
