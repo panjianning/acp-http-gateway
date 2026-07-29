@@ -43,8 +43,6 @@ import aiohttp
 
 HEADER_CONNECTION_ID = "Acp-Connection-Id"
 HEADER_SESSION_ID = "Acp-Session-Id"
-CONTENT_TYPE = "application/json"
-SSE_ACCEPT = "text/event-stream"
 
 
 def _json_rpc(method: str, msg_id: int, params: dict | None = None) -> dict:
@@ -73,16 +71,25 @@ class AcpHttpClient:
         self._msg_id += 1
         return self._msg_id
 
-    def _headers(self, extra: dict | None = None) -> dict:
+    def _headers(
+        self,
+        session_scoped: bool = False,
+        extra: dict[str, str] | None = None,
+    ) -> dict[str, str]:
+        """Build HTTP headers for a request.
+
+        Never includes ``Content-Type`` — aiohttp sets it automatically
+        when ``json=...`` is passed.
+        """
         h: dict[str, str] = {}
         if self._bearer_token:
             h["Authorization"] = f"Bearer {self._bearer_token}"
         if self._connection_id:
             h[HEADER_CONNECTION_ID] = self._connection_id
-        if self._session_id and extra and extra.get("session_scoped"):
+        if self._session_id and session_scoped:
             h[HEADER_SESSION_ID] = self._session_id
         if extra:
-            h.update({k: v for k, v in extra.items() if k not in h})
+            h.update(extra)
         return h
 
     async def connect(self) -> None:
@@ -104,7 +111,7 @@ class AcpHttpClient:
         async with self._http.post(
             urljoin(self._base_url, "/acp"),
             json=msg,
-            headers=self._headers({CONTENT_TYPE: CONTENT_TYPE}),
+            headers=self._headers(),
         ) as resp:
             if resp.status != 200:
                 body = await resp.text()
@@ -120,7 +127,7 @@ class AcpHttpClient:
 
     async def _read_sse(self) -> None:
         """Background task: read SSE events into the queue."""
-        headers = self._headers({SSE_ACCEPT: SSE_ACCEPT})
+        headers = self._headers(extra={"Accept": "text/event-stream"})
         async with self._http.get(
             urljoin(self._base_url, "/acp"),
             headers=headers,
@@ -128,7 +135,6 @@ class AcpHttpClient:
             if resp.status != 200:
                 body = await resp.text()
                 raise RuntimeError(f"SSE stream failed [{resp.status}]: {body}")
-            # Read SSE events line by line
             buffer = ""
             async for chunk in resp.content.iter_any():
                 text = chunk.decode(errors="replace")
@@ -152,79 +158,57 @@ class AcpHttpClient:
         msg = _json_rpc(
             "session/new",
             req_id,
-            {
-                "cwd": "/tmp",
-                "mcpServers": [],
-            },
+            {"cwd": "/tmp", "mcpServers": []},
         )
         async with self._http.post(
             urljoin(self._base_url, "/acp"),
             json=msg,
-            headers=self._headers({CONTENT_TYPE: CONTENT_TYPE}),
+            headers=self._headers(),
         ) as resp:
             if resp.status != 202:
                 body = await resp.text()
                 raise RuntimeError(f"session/new failed [{resp.status}]: {body}")
 
-        # Wait for the matching response on the SSE stream
         session_id = await self._wait_for_response(req_id, "session/new")
         print(f"[session/new] session_id={session_id}")
         self._session_id = session_id
         return session_id
 
     async def _wait_for_response(self, req_id: int, label: str = "?") -> str:
-        """Wait on the SSE queue for a response matching *req_id*.
-
-        Returns the ``sessionId`` from the result, or raises on error.
-        """
+        """Wait on the SSE queue for a response matching *req_id*."""
         while True:
             event = await asyncio.wait_for(self._sse_queue.get(), timeout=30)
             if event.get("id") == req_id:
                 if "error" in event:
                     raise RuntimeError(f"{label} error: {event['error']['message']}")
-                result = event.get("result", {})
-                sid = result.get("sessionId", "")
-                return sid
-            # Silently consume unrelated events (startupInfo, commands, etc.)
+                return event.get("result", {}).get("sessionId", "")
 
-    async def list_sessions(self) -> list[dict]:
+    async def list_sessions(self) -> None:
         """List ACP sessions."""
         req_id = self._next_id()
         msg = _json_rpc("session/list", req_id)
         async with self._http.post(
             urljoin(self._base_url, "/acp"),
             json=msg,
-            headers=self._headers({CONTENT_TYPE: CONTENT_TYPE}),
+            headers=self._headers(),
         ) as resp:
             if resp.status != 202:
                 body = await resp.text()
                 raise RuntimeError(f"session/list failed [{resp.status}]: {body}")
-
         await self._wait_for_response(req_id, "session/list")
-        # The response itself carries the session list in result.sessions.
-        # Re-walk the queue to extract it after the fact (simplistic but
-        # adequate for a demo).
-        # For a real client you would buffer the response event.
 
     async def load_session(self, session_id: str, cwd: str) -> str:
-        """Load an existing ACP session.
-
-        Returns the session_id on success.
-        """
+        """Load an existing ACP session."""
         req_id = self._next_id()
         msg = _json_rpc(
             "session/load",
             req_id,
-            {
-                "sessionId": session_id,
-                "cwd": cwd,
-                "mcpServers": [],
-            },
+            {"sessionId": session_id, "cwd": cwd, "mcpServers": []},
         )
         async with self._http.post(
             urljoin(self._base_url, "/acp"),
             json=msg,
-            headers=self._headers({CONTENT_TYPE: CONTENT_TYPE}),
+            headers=self._headers(),
         ) as resp:
             if resp.status != 202:
                 body = await resp.text()
@@ -240,20 +224,12 @@ class AcpHttpClient:
         msg = _json_rpc(
             "session/prompt",
             self._next_id(),
-            {
-                "sessionId": self._session_id,
-                "prompt": [{"type": "text", "text": text}],
-            },
+            {"sessionId": self._session_id, "prompt": [{"type": "text", "text": text}]},
         )
         async with self._http.post(
             urljoin(self._base_url, "/acp"),
             json=msg,
-            headers=self._headers(
-                {
-                    CONTENT_TYPE: CONTENT_TYPE,
-                    "session_scoped": "1",
-                }
-            ),
+            headers=self._headers(session_scoped=True),
         ) as resp:
             if resp.status != 202:
                 body = await resp.text()
@@ -261,7 +237,6 @@ class AcpHttpClient:
 
         print(f"[prompt] → {text}")
 
-        # Stream events until the prompt response arrives
         prompt_id = msg["id"]
         while True:
             try:
@@ -273,20 +248,17 @@ class AcpHttpClient:
             if "__sentinel__" in event:
                 break
 
-            # Check for end-of-turn
             if event.get("id") == prompt_id:
                 result = event.get("result", {})
                 stop_reason = result.get("stopReason", "?")
                 print(f"[prompt] ← done (stopReason={stop_reason})")
                 break
 
-            # Notification or request
             method = event.get("method", "")
             if method == "request_permission":
                 params = event.get("params", {})
                 tool = params.get("toolCall", {})
                 print(f"[prompt] ⚠️  permission requested: {tool.get('title', '?')}")
-                # Auto-approve for demo
                 approvemsg = {
                     "jsonrpc": "2.0",
                     "id": event["id"],
@@ -295,12 +267,7 @@ class AcpHttpClient:
                 async with self._http.post(
                     urljoin(self._base_url, "/acp"),
                     json=approvemsg,
-                    headers=self._headers(
-                        {
-                            CONTENT_TYPE: CONTENT_TYPE,
-                            "session_scoped": "1",
-                        }
-                    ),
+                    headers=self._headers(session_scoped=True),
                 ) as r:
                     if r.status == 202:
                         print("[prompt] → approved")
@@ -316,30 +283,24 @@ class AcpHttpClient:
 
     async def cancel(self) -> None:
         """Cancel the current turn."""
-        msg = {
-            "jsonrpc": "2.0",
-            "method": "session/cancel",
-            "params": {"sessionId": self._session_id},
-        }
+        msg = _json_rpc(
+            "session/cancel",
+            0,  # notification — no response expected
+            {"sessionId": self._session_id},
+        )
         async with self._http.post(
             urljoin(self._base_url, "/acp"),
             json=msg,
-            headers=self._headers(
-                {
-                    CONTENT_TYPE: CONTENT_TYPE,
-                    "session_scoped": "1",
-                }
-            ),
+            headers=self._headers(session_scoped=True),
         ) as resp:
             print(f"[cancel] status={resp.status}")
 
     async def close(self) -> None:
         """Terminate the connection."""
         if self._connection_id and self._http:
-            headers = self._headers()
             async with self._http.delete(
                 urljoin(self._base_url, "/acp"),
-                headers=headers,
+                headers=self._headers(),
             ) as resp:
                 print(f"[close] status={resp.status}")
         if self._sse_task:
