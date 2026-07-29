@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<!--
+  Copyright 2026 acp-http-gateway authors.
+
+  Licensed under the Apache License, Version 2.0 (the "License");
+  you may not use this file except in compliance with the License.
+  You may obtain a copy of the License at
+
+      http://www.apache.org/licenses/LICENSE-2.0
+
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
+
+  Browser demo for the ACP Streamable HTTP Gateway.
+
+  Demonstrates:
+    1. POST /acp with initialize + Authorization header.
+    2. GET /acp for SSE stream (uses fetch + ReadableStream).
+    3. POST /acp for session/new, session/prompt.
+    4. Real-time message display.
+
+  Open this file in a browser AFTER starting the gateway:
+    uv run acp-http-gateway --cmd "npx pi-acp" --cors-origin "*"
+-->
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ACP HTTP Gateway — Browser Demo</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+           max-width: 900px; margin: 20px auto; padding: 20px; background: #f5f5f5; }
+    h1 { font-size: 1.5rem; margin-bottom: 8px; }
+    .config { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+    .config input { flex: 1; min-width: 200px; padding: 8px 12px; border: 1px solid #ccc;
+                    border-radius: 6px; font-size: 14px; }
+    .config button { padding: 8px 20px; border: none; border-radius: 6px;
+                     background: #0066cc; color: #fff; font-size: 14px; cursor: pointer; }
+    .config button:disabled { opacity: 0.5; cursor: not-allowed; }
+    .status { padding: 8px 12px; border-radius: 6px; margin-bottom: 16px;
+              font-size: 13px; font-weight: 500; }
+    .status.disconnected { background: #fee; color: #c00; }
+    .status.connected { background: #efe; color: #060; }
+    .chat { background: #fff; border-radius: 8px; border: 1px solid #ddd;
+            min-height: 300px; max-height: 500px; overflow-y: auto; padding: 12px;
+            margin-bottom: 16px; }
+    .msg { margin-bottom: 10px; padding: 8px 12px; border-radius: 8px;
+           max-width: 85%; line-height: 1.5; font-size: 14px; }
+    .msg.user { background: #0066cc; color: #fff; margin-left: auto; }
+    .msg.agent { background: #e8e8e8; color: #333; }
+    .msg.system { background: #fff3cd; color: #856404; max-width: 100%;
+                  font-size: 12px; font-family: monospace; }
+    .input-area { display: flex; gap: 8px; }
+    .input-area input { flex: 1; padding: 10px 14px; border: 1px solid #ccc;
+                        border-radius: 8px; font-size: 14px; }
+    .input-area button { padding: 10px 24px; border: none; border-radius: 8px;
+                         background: #0066cc; color: #fff; font-size: 14px; cursor: pointer; }
+    .input-area button:disabled { opacity: 0.5; cursor: not-allowed; }
+    .token-hint { font-size: 11px; color: #666; margin-top: 4px; }
+  </style>
+</head>
+<body>
+  <h1>ACP HTTP Gateway — Browser Demo</h1>
+
+  <div class="config">
+    <input id="gateway-url" value="http://localhost:8766" placeholder="Gateway URL">
+    <input id="bearer-token" type="password" placeholder="Bearer token (optional)">
+    <button id="btn-connect" onclick="connect()">Connect</button>
+    <button id="btn-disconnect" onclick="disconnect()" disabled>Disconnect</button>
+  </div>
+  <div class="token-hint">
+    Leave bearer token empty if gateway is running without --bearer-token.
+  </div>
+
+  <div id="status" class="status disconnected">Disconnected</div>
+
+  <div id="chat" class="chat"></div>
+
+  <div class="input-area">
+    <input id="prompt-input" placeholder="Type a message..." disabled
+           onkeydown="if(event.key==='Enter')sendPrompt()">
+    <button id="btn-send" onclick="sendPrompt()" disabled>Send</button>
+  </div>
+
+  <script>
+    let connectionId = null;
+    let sessionId = null;
+    let msgId = 0;
+    let sseAbortController = null;
+    let sseReader = null;
+
+    const $ = (id) => document.getElementById(id);
+
+    function addMsg(type, text) {
+      const div = document.createElement('div');
+      div.className = 'msg ' + type;
+      div.textContent = text;
+      $('chat').appendChild(div);
+      $('chat').scrollTop = $('chat').scrollHeight;
+    }
+
+    function setConnected(connected) {
+      $('btn-connect').disabled = connected;
+      $('btn-disconnect').disabled = !connected;
+      $('prompt-input').disabled = !connected;
+      $('btn-send').disabled = !connected;
+      $('status').textContent = connected ? 'Connected' : 'Disconnected';
+      $('status').className = 'status ' + (connected ? 'connected' : 'disconnected');
+    }
+
+    function nextId() { return ++msgId; }
+
+    function baseHeaders() {
+      const h = { 'Content-Type': 'application/json' };
+      if ($('bearer-token').value)
+        h['Authorization'] = 'Bearer ' + $('bearer-token').value;
+      if (connectionId) h['Acp-Connection-Id'] = connectionId;
+      return h;
+    }
+
+    async function readSSE(response) {
+      const reader = response.body.getReader();
+      sseReader = reader;
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const parts = buffer.split('\n\n');
+          buffer = parts.pop(); // keep incomplete event in buffer
+
+          for (const part of parts) {
+            let data = null;
+            for (const line of part.split('\n')) {
+              if (line.startsWith('data: ')) data = line.slice(6);
+            }
+            if (!data) continue;
+
+            try {
+              const msg = JSON.parse(data);
+              handleSSEEvent(msg);
+            } catch (e) {
+              // ignore non-JSON (heartbeat comments, etc.)
+            }
+          }
+        }
+      } catch (e) {
+        if (e.name !== 'AbortError')
+          addMsg('system', 'SSE stream error: ' + e.message);
+      }
+    }
+
+    function handleSSEEvent(msg) {
+      // Check for prompt response (end of turn)
+      if (msg.result && msg.id) {
+        addMsg('system', 'Turn complete (stopReason=' + (msg.result.stopReason || '?') + ')');
+        return;
+      }
+
+      // Check for permission request
+      if (msg.method === 'request_permission') {
+        const tool = msg.params?.toolCall;
+        addMsg('system', '⚠ Permission requested: ' + (tool?.title || '?'));
+
+        // Auto-approve for demo
+        const approval = {
+          jsonrpc: '2.0',
+          id: msg.id,
+          result: { outcome: 'allow_once' }
+        };
+        const headers = baseHeaders();
+        if (sessionId) headers['Acp-Session-Id'] = sessionId;
+        fetch($('gateway-url').value + '/acp', {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(approval)
+        });
+        return;
+      }
+
+      // Check for session/new response
+      if (msg.result?.sessionId && !sessionId) {
+        sessionId = msg.result.sessionId;
+        addMsg('system', 'Session created: ' + sessionId);
+        return;
+      }
+
+      // Agent message chunks
+      const params = msg.params || {};
+      const message = params.message;
+      if (message && typeof message.content === 'string') {
+        addMsg('agent', message.content);
+      }
+    }
+
+    async function connect() {
+      const baseUrl = $('gateway-url').value;
+      addMsg('system', 'Connecting to ' + baseUrl + '...');
+
+      // Step 1: initialize
+      const initBody = {
+        jsonrpc: '2.0',
+        method: 'initialize',
+        id: nextId(),
+        params: {
+          protocolVersion: 1,
+          clientCapabilities: {},
+          clientInfo: { name: 'browser-demo', version: '0.1.0' }
+        }
+      };
+
+      try {
+        const resp = await fetch(baseUrl + '/acp', {
+          method: 'POST',
+          headers: baseHeaders(),
+          body: JSON.stringify(initBody)
+        });
+
+        if (!resp.ok) {
+          const err = await resp.text();
+          throw new Error('initialize failed [' + resp.status + ']: ' + err);
+        }
+
+        connectionId = resp.headers.get('Acp-Connection-Id');
+        const result = await resp.json();
+        addMsg('system', 'Connected (connection_id=' + connectionId + ')');
+      } catch (e) {
+        addMsg('system', 'Connection error: ' + e.message);
+        return;
+      }
+
+      setConnected(true);
+
+      // Step 2: Open SSE stream
+      sseAbortController = new AbortController();
+      const sseHeaders = { 'Accept': 'text/event-stream', 'Acp-Connection-Id': connectionId };
+      fetch(baseUrl + '/acp', {
+        headers: sseHeaders,
+        signal: sseAbortController.signal
+      }).then(response => {
+        if (!response.ok) throw new Error('SSE failed: ' + response.status);
+        return readSSE(response);
+      }).catch(e => {
+        if (e.name !== 'AbortError')
+          addMsg('system', 'SSE error: ' + e.message);
+      });
+
+      // Give SSE a moment to establish
+      await new Promise(r => setTimeout(r, 200));
+
+      // Step 3: Create session
+      const sessionBody = {
+        jsonrpc: '2.0',
+        method: 'session/new',
+        id: nextId(),
+        params: { cwd: '/tmp' }
+      };
+
+      const sessionResp = await fetch(baseUrl + '/acp', {
+        method: 'POST',
+        headers: baseHeaders(),
+        body: JSON.stringify(sessionBody)
+      });
+
+      if (sessionResp.status !== 202) {
+        addMsg('system', 'session/new returned ' + sessionResp.status);
+      }
+    }
+
+    async function sendPrompt() {
+      const input = $('prompt-input');
+      const text = input.value.trim();
+      if (!text || !connectionId || !sessionId) return;
+
+      input.value = '';
+      addMsg('user', text);
+
+      const promptBody = {
+        jsonrpc: '2.0',
+        method: 'session/prompt',
+        id: nextId(),
+        params: {
+          sessionId: sessionId,
+          prompt: [{ type: 'text', text: text }]
+        }
+      };
+
+      const headers = baseHeaders();
+      headers['Acp-Session-Id'] = sessionId;
+
+      try {
+        const resp = await fetch($('gateway-url').value + '/acp', {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(promptBody)
+        });
+        if (resp.status !== 202) {
+          addMsg('system', 'prompt error: ' + resp.status);
+        }
+      } catch (e) {
+        addMsg('system', 'Send error: ' + e.message);
+      }
+    }
+
+    async function disconnect() {
+      if (sseAbortController) {
+        sseAbortController.abort();
+        sseAbortController = null;
+      }
+
+      if (connectionId) {
+        const headers = { 'Acp-Connection-Id': connectionId };
+        if ($('bearer-token').value)
+          headers['Authorization'] = 'Bearer ' + $('bearer-token').value;
+        try {
+          await fetch($('gateway-url').value + '/acp', {
+            method: 'DELETE',
+            headers
+          });
+        } catch (e) {
+          // ignore
+        }
+      }
+
+      connectionId = null;
+      sessionId = null;
+      setConnected(false);
+      addMsg('system', 'Disconnected');
+    }
+  </script>
+</body>
+</html>
