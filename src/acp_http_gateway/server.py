@@ -36,6 +36,7 @@ from .bridge import (
     write_to_agent,
 )
 from .connection import ConnectionStore
+from .openai import SessionPool, make_openai_handler
 from .sse import sse_response, write_sse_stream
 
 logger = logging.getLogger(__name__)
@@ -121,6 +122,9 @@ def create_app(
     idle_timeout: float = 300.0,
     cors_origin: str | None = None,
     env: dict[str, str] | None = None,
+    enable_openai: bool = False,
+    openai_pool_max: int = 20,
+    openai_pool_idle: float = 600.0,
 ) -> web.Application:
     """Create an aiohttp application for the ACP HTTP gateway.
 
@@ -136,6 +140,11 @@ def create_app(
             Set to ``"*"`` to allow all origins (useful for browser
             clients on a different port during development).
         env: Environment variables for the agent subprocess.
+        enable_openai: If True, expose ``POST /v1/chat/completions``
+            (OpenAI-compatible layer).
+        openai_pool_max: Max concurrent sessions in the OpenAI pool.
+        openai_pool_idle: Idle timeout (seconds) before a pooled OpenAI
+            session is evicted.
 
     Returns:
         A configured :class:`aiohttp.web.Application`.
@@ -145,6 +154,15 @@ def create_app(
 
     store = ConnectionStore(idle_timeout=idle_timeout)
     semaphore = asyncio.Semaphore(max_capacity)
+
+    # OpenAI compatibility layer (optional)
+    openai_pool = SessionPool(
+        max_size=openai_pool_max,
+        idle_timeout=openai_pool_idle,
+    )
+    openai_handler = None
+    if enable_openai:
+        openai_handler = make_openai_handler(cmd, env, openai_pool)
 
     async def _handle_post(request: web.Request) -> web.Response:
         """Handle POST /acp — send JSON-RPC to agent."""
@@ -323,6 +341,7 @@ def create_app(
             while True:
                 await asyncio.sleep(60)
                 await store.cleanup_expired()
+                await openai_pool.cleanup_expired()
         except asyncio.CancelledError:
             pass
 
@@ -331,6 +350,7 @@ def create_app(
     app = web.Application()
     app["store"] = store
     app["cmd"] = cmd
+    app["openai_pool"] = openai_pool
 
     async def _start_cleanup(app: web.Application) -> None:
         asyncio.create_task(_cleanup_task(app))
@@ -344,6 +364,12 @@ def create_app(
     app.router.add_post("/acp", _handle_post)
     app.router.add_get("/acp", _handle_get)
     app.router.add_delete("/acp", _handle_delete)
+
+    # OpenAI compatibility endpoint (optional)
+    if openai_handler is not None:
+        app.router.add_post("/v1/chat/completions", openai_handler)
+        if cors_origin:
+            app.router.add_route("OPTIONS", "/v1/chat/completions", _handle_options)
 
     # Health check
     async def _health(_: web.Request) -> web.Response:
@@ -369,6 +395,9 @@ async def run_server(
     idle_timeout: float = 300.0,
     cors_origin: str | None = None,
     env: dict[str, str] | None = None,
+    enable_openai: bool = False,
+    openai_pool_max: int = 20,
+    openai_pool_idle: float = 600.0,
 ) -> None:
     """Run the ACP HTTP gateway server.
 
@@ -382,6 +411,9 @@ async def run_server(
         idle_timeout: Connection idle timeout in seconds.
         cors_origin: CORS origin for browser clients.
         env: Environment variables for the agent subprocess.
+        enable_openai: Expose the OpenAI-compatible endpoint.
+        openai_pool_max: Max pooled OpenAI sessions.
+        openai_pool_idle: Idle timeout for pooled OpenAI sessions.
     """
     app = create_app(
         cmd,
@@ -390,14 +422,18 @@ async def run_server(
         idle_timeout=idle_timeout,
         cors_origin=cors_origin,
         env=env,
+        enable_openai=enable_openai,
+        openai_pool_max=openai_pool_max,
+        openai_pool_idle=openai_pool_idle,
     )
 
     logger.info(
-        "ACP HTTP gateway starting on http://%s:%d (cmd=%s, max_conns=%d)",
+        "ACP HTTP gateway starting on http://%s:%d (cmd=%s, max_conns=%d, openai=%s)",
         host,
         port,
         " ".join(cmd),
         max_capacity,
+        enable_openai,
     )
 
     runner = web.AppRunner(app)
@@ -413,4 +449,6 @@ async def run_server(
     except asyncio.CancelledError:
         logger.info("ACP HTTP gateway shutting down")
     finally:
+        pool: SessionPool = app["openai_pool"]
+        await pool.evict_all()
         await runner.cleanup()

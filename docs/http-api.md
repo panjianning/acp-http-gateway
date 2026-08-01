@@ -26,9 +26,10 @@ No SDK is required.  Just HTTP + JSON-RPC.
   - [5.2 Session-Scoped Stream](#52-session-scoped-stream)
   - [5.3 SSE Event Format](#53-sse-event-format)
 - [6. DELETE /acp](#6-delete-acp)
-- [7. Error Responses](#7-error-responses)
-- [8. Complete Flow Examples](#8-complete-flow-examples)
-- [9. Headers Reference](#9-headers-reference)
+- [7. OpenAI Compatibility (`POST /v1/chat/completions`)](#7-openai-compatibility-post-v1chatcompletions)
+- [8. Error Responses](#8-error-responses)
+- [9. Complete Flow Examples](#9-complete-flow-examples)
+- [10. Headers Reference](#10-headers-reference)
 
 ---
 
@@ -542,7 +543,80 @@ All active SSE streams for this connection will close.
 
 ---
 
-## 7. Error Responses
+## 7. OpenAI Compatibility (`POST /v1/chat/completions`)
+
+*Enabled with `--enable-openai`.*  Exposes an OpenAI Chat Completions
+compatible endpoint on top of the ACP agent.  This lets any OpenAI SDK,
+tool, or script talk to the agent without knowing ACP.
+
+```bash
+# Enable
+acp-http-gateway --cmd "npx pi-acp" --enable-openai
+```
+
+**Request body** (subset of the OpenAI schema):
+
+```json
+{
+  "model": "huya/deepseek/deepseek-v4-pro",
+  "messages": [
+    {"role": "system", "content": "You are helpful."},
+    {"role": "user", "content": "Hello"}
+  ],
+  "stream": false,
+  "session_id": "019fbb48-ae22-7360-858c-9e1be5d8db55"
+}
+```
+
+| Field        | Required | Notes                                          |
+|--------------|----------|------------------------------------------------|
+| `messages`   | **Yes**  | Array of `{role, content}`.  Last user message becomes the prompt. |
+| `model`      | No       | Echoed back; best-effort `session/set_model`.  |
+| `stream`     | No       | `true` returns OpenAI SSE chunks.              |
+| `session_id` | No       | Reuse an existing session (from `X-ACP-Session-Id`). |
+
+**Non-streaming response:**
+
+```json
+{
+  "id": "chatcmpl-xxx",
+  "object": "chat.completion",
+  "created": 1785553150,
+  "model": "huya/deepseek/deepseek-v4-pro",
+  "choices": [{
+    "index": 0,
+    "message": {"role": "assistant", "content": "..."},
+    "finish_reason": "stop"
+  }],
+  "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+}
+```
+
+The response includes the `X-ACP-Session-Id` header — pass it back as
+`session_id` on the next request to continue the same conversation.
+
+**Streaming response** (when `stream: true`):
+
+```
+data: {"id":"chatcmpl-xxx","object":"chat.completion.chunk","choices":[{"index":0,"delta":{"role":"assistant"},"finish_reason":null}]}
+data: {"id":"chatcmpl-xxx","object":"chat.completion.chunk","choices":[{"index":0,"delta":{"content":"Hel"},"finish_reason":null}]}
+data: {"id":"chatcmpl-xxx","object":"chat.completion.chunk","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}
+data: [DONE]
+```
+
+**Behavior notes:**
+
+- Tool calls are **not** exposed — the agent runs its own toolchain and
+  only the final text is returned.
+- The agent's startup banner (e.g. pi's "pi v0.82.1 / ## Skills" prelude)
+  is stripped from the first reply.
+- Sessions are pooled (`--openai-pool-max`, `--openai-pool-idle`).  Idle
+  sessions are evicted; an evicted `session_id` transparently starts a
+  fresh session.
+
+---
+
+## 8. Error Responses
 
 | Status | Meaning                             | Body                                   |
 |--------|-------------------------------------|----------------------------------------|
@@ -556,9 +630,9 @@ All active SSE streams for this connection will close.
 
 ---
 
-## 8. Complete Flow Examples
+## 9. Complete Flow Examples
 
-### 8.1 curl (Full Script)
+### 9.1.1 curl (Full Script)
 
 ```bash
 #!/bin/bash
@@ -609,7 +683,7 @@ curl -s -X DELETE "$BASE/acp" -H "Acp-Connection-Id: $CONN_ID" > /dev/null
 rm -f /tmp/sse.log
 ```
 
-### 8.2 JavaScript (fetch)
+### 9.2.2 JavaScript (fetch)
 
 ```javascript
 const BASE = 'http://localhost:8766';
@@ -654,14 +728,14 @@ await fetch(`${BASE}/acp`, {
 });
 ```
 
-### 8.3 Python (aiohttp)
+### 9.3.3 Python (aiohttp)
 
 See [`examples/simple_client.py`](../examples/simple_client.py) for a
 complete, runnable Python client.
 
 ---
 
-## 9. Headers Reference
+## 10. Headers Reference
 
 | Header                 | Direction        | When                    | Value                         |
 |------------------------|------------------|-------------------------|-------------------------------|

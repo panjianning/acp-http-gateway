@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.0] — 2026-08-01
+
+### Added
+
+- OpenAI Chat Completions compatibility layer:
+  `POST /v1/chat/completions` (enable with `--enable-openai`).
+- Stateful multi-turn sessions via `X-ACP-Session-Id` header and
+  `session_id` request field.
+- LRU session pool for the OpenAI layer (`--openai-pool-max`,
+  `--openai-pool-idle`).
+- Streaming responses (OpenAI SSE chunk format).
+- Startup banner stripping for pi-acp agents.
+- `tests/test_openai.py` with 5 tests.
+
+### Fixed
+
+- CORS `Access-Control-Allow-Origin` missing on `GET /acp` SSE responses.
+- CORS `Access-Control-Expose-Headers` missing for `Acp-Connection-Id`.
+- Client `Content-Type` header bug (`{CONTENT_TYPE: CONTENT_TYPE}`).
+- SSE event parsing in examples (`params.update.content`, not
+  `params.message`).
+- Browser demo event-ordering bug where `sessionId` was never captured.
+
 ## [0.1.0] — 2026-07-29
 
 ### Added

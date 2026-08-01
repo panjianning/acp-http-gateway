@@ -89,6 +89,28 @@ def main() -> None:
         help="Require Bearer token authentication (env: ACP_BEARER_TOKEN)",
     )
 
+    # ── OpenAI compatibility layer ────────────────────────────────
+    parser.add_argument(
+        "--enable-openai",
+        action="store_true",
+        default=os.environ.get("ACP_ENABLE_OPENAI", "") == "1",
+        help="Expose POST /v1/chat/completions (OpenAI-compatible) "
+        "(env: ACP_ENABLE_OPENAI=1)",
+    )
+    parser.add_argument(
+        "--openai-pool-max",
+        type=int,
+        default=int(os.environ.get("ACP_OPENAI_POOL_MAX", "20")),
+        help="Max pooled OpenAI sessions (env: ACP_OPENAI_POOL_MAX, default: 20)",
+    )
+    parser.add_argument(
+        "--openai-pool-idle",
+        type=float,
+        default=float(os.environ.get("ACP_OPENAI_POOL_IDLE", "600")),
+        help="OpenAI session idle timeout seconds "
+        "(env: ACP_OPENAI_POOL_IDLE, default: 600)",
+    )
+
     # ── Logging ─────────────────────────────────────────────────────
     parser.add_argument(
         "--log-level",
@@ -127,6 +149,9 @@ def main() -> None:
                 max_capacity=args.max_capacity,
                 idle_timeout=args.idle_timeout,
                 cors_origin=args.cors_origin,
+                enable_openai=args.enable_openai,
+                openai_pool_max=args.openai_pool_max,
+                openai_pool_idle=args.openai_pool_idle,
             )
         )
     except KeyboardInterrupt:

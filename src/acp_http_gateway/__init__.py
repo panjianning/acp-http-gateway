@@ -62,6 +62,7 @@ Usage::
 
 from .server import run_server, create_app
 from .auth import AuthValidator, BearerTokenValidator, NoAuthValidator
+from .openai import SessionPool, PooledSession, make_openai_handler
 
 __all__ = [
     "run_server",
@@ -69,5 +70,8 @@ __all__ = [
     "AuthValidator",
     "BearerTokenValidator",
     "NoAuthValidator",
+    "SessionPool",
+    "PooledSession",
+    "make_openai_handler",
 ]
-__version__ = "0.1.0"
+__version__ = "0.2.0"

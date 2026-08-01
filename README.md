@@ -63,6 +63,63 @@ uv run python examples/simple_client.py \
 Open `examples/browser-client.html` in your browser.  Enter the gateway URL
 and optional bearer token, then click **Connect**.
 
+### OpenAI-compatible API
+
+Enable the optional OpenAI Chat Completions layer with `--enable-openai`:
+
+```bash
+uv run acp-http-gateway --cmd "npx pi-acp" --enable-openai
+```
+
+Now `POST /v1/chat/completions` works like a standard OpenAI endpoint,
+while the underlying agent keeps its own session state:
+
+```bash
+# Non-streaming — returns the assistant's reply
+curl -s http://localhost:8766/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "huya/deepseek/deepseek-v4-pro",
+    "messages": [{"role": "user", "content": "你好"}]
+  }'
+
+# Streaming — SSE chunks (OpenAI format)
+curl -s -N http://localhost:8766/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "huya/deepseek/deepseek-v4-pro",
+    "messages": [{"role": "user", "content": "你好"}],
+    "stream": true
+  }'
+```
+
+**Stateful sessions:** the response includes an `X-ACP-Session-Id` header.
+Pass it back in the request body as `session_id` to continue the same
+conversation (the agent remembers prior turns):
+
+```bash
+# Turn 1 → grab X-ACP-Session-Id from the response headers
+# Turn 2 → reuse it
+curl -s http://localhost:8766/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "messages": [{"role": "user", "content": "接着刚才的话题"}],
+    "session_id": "019fbb48-ae22-7360-858c-9e1be5d8db55"
+  }'
+```
+
+Notes:
+
+- Tool calls are **not** exposed — the agent executes its own toolchain
+  and only the final text is returned.
+- `usage` is always zero (ACP has no token accounting).
+- The agent's startup banner is stripped from the first reply.
+- The OpenAI layer uses a session pool (`--openai-pool-max`, default 20;
+  `--openai-pool-idle`, default 600s).  Idle sessions are evicted; if a
+  client returns with an evicted `session_id`, a new session is created.
+
+See **[docs/http-api.md](docs/http-api.md)** for the full API reference.
+
 ## curl Example
 
 ```bash
@@ -120,6 +177,9 @@ options:
   --idle-timeout S      Connection idle timeout in seconds (default: 300)
   --cors-origin ORIGIN  CORS origin (env: ACP_CORS_ORIGIN, e.g. "*")
   --bearer-token TOKEN  Require Bearer token auth (env: ACP_BEARER_TOKEN)
+  --enable-openai       Expose POST /v1/chat/completions (env: ACP_ENABLE_OPENAI=1)
+  --openai-pool-max N   Max pooled OpenAI sessions (default: 20)
+  --openai-pool-idle S  OpenAI session idle timeout (default: 600)
   --log-level LEVEL     DEBUG, INFO, WARNING, ERROR (default: INFO)
 ```
 
@@ -168,14 +228,19 @@ acp-http-gateway/
 │   ├── bridge.py            # Agent subprocess bridge
 │   ├── connection.py        # Connection state + registry
 │   ├── sse.py               # SSE formatting utilities
-│   └── auth.py              # Pluggable auth abstraction
+│   ├── auth.py              # Pluggable auth abstraction
+│   └── openai/              # OpenAI-compatible layer (optional)
+│       ├── handler.py       #   POST /v1/chat/completions
+│       ├── openai_format.py #   OpenAI ↔ ACP format conversion
+│       └── session_pool.py  #   LRU session pool
 ├── examples/
 │   ├── simple_client.py     # Python client
 │   └── browser-client.html  # Browser demo
 ├── docs/
 │   └── http-api.md          # Full HTTP API reference
 ├── tests/
-│   └── test_server.py
+│   ├── test_server.py
+│   └── test_openai.py
 ├── pyproject.toml
 ├── README.md
 ├── LICENSE
