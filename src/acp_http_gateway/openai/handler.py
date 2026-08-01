@@ -28,6 +28,7 @@ from typing import Any
 from aiohttp import web
 
 from ..bridge import initialize_agent, spawn_agent, start_stdout_router, write_to_agent
+from ..auth import AuthValidator
 from ..connection import Connection
 from .openai_format import (
     build_prompt,
@@ -329,6 +330,7 @@ def make_openai_handler(
     cmd: list[str],
     env: dict[str, str] | None,
     pool: SessionPool,
+    auth_validator: AuthValidator | None = None,
 ) -> Any:
     """Create the ``POST /v1/chat/completions`` handler.
 
@@ -336,12 +338,23 @@ def make_openai_handler(
         cmd: The agent command.
         env: Environment overrides for the subprocess.
         pool: The session pool to use.
+        auth_validator: Optional auth validator.  If set, every request
+            is validated and rejected with 401 on failure.
 
     Returns:
         An aiohttp request handler coroutine.
     """
 
     async def _handle(request: web.Request) -> web.Response:
+        # Enforce auth if configured (same validator as /acp initialize).
+        if auth_validator is not None:
+            auth_context = await auth_validator.validate(request)
+            if auth_context is None:
+                return web.json_response(
+                    make_error("Authentication required", "unauthorized"),
+                    status=401,
+                    dumps=_json_dumps,
+                )
         try:
             body = await request.json()
         except Exception:

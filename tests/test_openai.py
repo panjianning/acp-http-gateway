@@ -90,6 +90,36 @@ async def openai_base_url():
 
 
 @pytest.fixture
+async def openai_auth_base_url():
+    """Server with the OpenAI layer enabled + bearer token auth."""
+    from acp_http_gateway.auth import BearerTokenValidator
+
+    app = create_app(
+        _openai_fake_cmd(),
+        auth_validator=BearerTokenValidator("sk-test"),
+        enable_openai=True,
+    )
+
+    runner = aiohttp.web.AppRunner(app)
+    await runner.setup()
+    site = aiohttp.web.TCPSite(runner, "127.0.0.1", 0)
+    await site.start()
+
+    for sock in site._server.sockets:
+        port = sock.getsockname()[1]
+        break
+    else:
+        port = 0
+
+    url = f"http://127.0.0.1:{port}"
+    yield url
+
+    pool = app["openai_pool"]
+    await pool.evict_all()
+    await runner.cleanup()
+
+
+@pytest.fixture
 async def session():
     """aiohttp client session."""
     async with aiohttp.ClientSession() as s:
@@ -232,3 +262,35 @@ async def test_openai_unknown_model_404(openai_base_url, session):
         data = await resp.json()
         assert data["error"]["code"] == "model_not_found"
         assert "bad-model" in data["error"]["message"]
+
+
+@pytest.mark.asyncio
+async def test_openai_auth_required(openai_auth_base_url, session):
+    """401 without a bearer token when auth is enabled."""
+    body = {
+        "model": "m",
+        "messages": [{"role": "user", "content": "hi"}],
+    }
+    async with session.post(
+        f"{openai_auth_base_url}/v1/chat/completions", json=body
+    ) as resp:
+        assert resp.status == 401
+        data = await resp.json()
+        assert data["error"]["code"] == "unauthorized"
+
+
+@pytest.mark.asyncio
+async def test_openai_auth_authorized(openai_auth_base_url, session):
+    """200 with the correct bearer token."""
+    body = {
+        "model": "m",
+        "messages": [{"role": "user", "content": "hi"}],
+    }
+    async with session.post(
+        f"{openai_auth_base_url}/v1/chat/completions",
+        json=body,
+        headers={"Authorization": "Bearer sk-test"},
+    ) as resp:
+        assert resp.status == 200
+        data = await resp.json()
+        assert data["choices"][0]["message"]["content"] == "Reply to: hi"

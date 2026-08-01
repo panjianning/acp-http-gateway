@@ -183,7 +183,9 @@ def create_app(
     )
     openai_handler = None
     if enable_openai:
-        openai_handler = make_openai_handler(cmd, env, openai_pool)
+        openai_handler = make_openai_handler(
+            cmd, env, openai_pool, auth_validator=auth_validator
+        )
 
     async def _handle_post(request: web.Request) -> web.Response:
         """Handle POST /acp — send JSON-RPC to agent."""
