@@ -35,34 +35,26 @@
 # sessions/, skills/ and extensions/.
 # ─────────────────────────────────────────────────────────────────────
 
-# ── Stage 1: Node runtime (node + npm only) ────────────────────────
-FROM node:22-slim AS node-runtime
-
-# ── Stage 2: runtime (python + uv + gateway + node + pi) ───────────
 FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim
 
-# Copy the Node runtime (binary + npm, including npm's own deps).
-# node:22-slim and bookworm-slim are both Debian bookworm, so the
-# dynamically-linked node binary runs fine.
-COPY --from=node-runtime /usr/local/bin/node /usr/local/bin/
-COPY --from=node-runtime /usr/local/bin/npm /usr/local/bin/
-COPY --from=node-runtime /usr/local/bin/npx /usr/local/bin/
-COPY --from=node-runtime /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/npm/
+# ── Node 22 (official nodesource repo) + git ───────────────────────
+# Installs a self-consistent node+npm layout, avoiding fragile
+# multi-stage copies of npm's global prefix.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl ca-certificates git \
+    && curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
+    && apt-get install -y nodejs \
+    && rm -rf /var/lib/apt/lists/*
 
-# Install pi + pi-acp in THIS image so npm resolves the full dependency
-# tree (incl. @agentclientprotocol/sdk) against the actual runtime fs.
+# ── pi + pi-acp (npm global) ───────────────────────────────────────
 # Probe: run an initialize handshake during build — fails fast if the
-# SDK dependency is missing.
+# @agentclientprotocol/sdk dependency is missing.
 RUN npm install -g @mariozechner/pi-coding-agent pi-acp \
     && echo '{"jsonrpc":"2.0","method":"initialize","id":1,"params":{"protocolVersion":1,"clientCapabilities":{},"clientInfo":{"name":"probe","version":"0"}}}' \
        | pi-acp | head -1 \
        | grep -q '"jsonrpc":"2.0"'
 
-# Git + clone the gateway from GitHub (no local build context needed)
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends git \
-    && rm -rf /var/lib/apt/lists/*
-
+# ── Gateway (cloned from GitHub) ───────────────────────────────────
 WORKDIR /opt
 RUN git clone --depth 1 https://github.com/panjianning/acp-http-gateway.git
 WORKDIR /opt/acp-http-gateway
