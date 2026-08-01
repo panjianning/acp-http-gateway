@@ -662,7 +662,7 @@ sleep 1
 curl -s -X POST "$BASE/acp" \
   -H "Content-Type: application/json" \
   -H "Acp-Connection-Id: $CONN_ID" \
-  -d '{"jsonrpc":"2.0","method":"session/new","id":2,"params":{"cwd":"/tmp"}}' > /dev/null
+  -d '{"jsonrpc":"2.0","method":"session/new","id":2,"params":{"cwd":"/tmp","mcpServers":[]}}' > /dev/null
 sleep 1
 
 # Read session ID from SSE log
