@@ -35,22 +35,28 @@
 # sessions/, skills/ and extensions/.
 # ─────────────────────────────────────────────────────────────────────
 
-# ── Stage 1: node dependencies (pi + pi-acp) ───────────────────────
-FROM node:22-slim AS node-deps
-RUN npm install -g @mariozechner/pi-coding-agent pi-acp
+# ── Stage 1: Node runtime (node + npm only) ────────────────────────
+FROM node:22-slim AS node-runtime
 
-# ── Stage 2: runtime (python + uv + gateway + node) ────────────────
+# ── Stage 2: runtime (python + uv + gateway + node + pi) ───────────
 FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim
 
-# Copy the Node runtime + globally installed pi/pi-acp.
-# (node:22-slim and bookworm-slim are both Debian bookworm, so the
-#  dynamically-linked node binary runs fine.)
-COPY --from=node-deps /usr/local/bin/node /usr/local/bin/
-COPY --from=node-deps /usr/local/bin/npm /usr/local/bin/
-COPY --from=node-deps /usr/local/bin/npx /usr/local/bin/
-COPY --from=node-deps /usr/local/bin/pi /usr/local/bin/
-COPY --from=node-deps /usr/local/bin/pi-acp /usr/local/bin/
-COPY --from=node-deps /usr/local/lib/node_modules /usr/local/lib/node_modules/
+# Copy the Node runtime (binary + npm, including npm's own deps).
+# node:22-slim and bookworm-slim are both Debian bookworm, so the
+# dynamically-linked node binary runs fine.
+COPY --from=node-runtime /usr/local/bin/node /usr/local/bin/
+COPY --from=node-runtime /usr/local/bin/npm /usr/local/bin/
+COPY --from=node-runtime /usr/local/bin/npx /usr/local/bin/
+COPY --from=node-runtime /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/npm/
+
+# Install pi + pi-acp in THIS image so npm resolves the full dependency
+# tree (incl. @agentclientprotocol/sdk) against the actual runtime fs.
+# Probe: run an initialize handshake during build — fails fast if the
+# SDK dependency is missing.
+RUN npm install -g @mariozechner/pi-coding-agent pi-acp \
+    && echo '{"jsonrpc":"2.0","method":"initialize","id":1,"params":{"protocolVersion":1,"clientCapabilities":{},"clientInfo":{"name":"probe","version":"0"}}}' \
+       | pi-acp | head -1 \
+       | grep -q '"jsonrpc":"2.0"'
 
 # Git + clone the gateway from GitHub (no local build context needed)
 RUN apt-get update \
