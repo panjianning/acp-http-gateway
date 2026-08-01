@@ -118,7 +118,8 @@ Notes:
   `--openai-pool-idle`, default 600s).  Idle sessions are evicted; if a
   client returns with an evicted `session_id`, a new session is created.
 
-See **[docs/http-api.md](docs/http-api.md)** for the full API reference.
+See **[docs/http-api.md](docs/http-api.md)** for the full ACP API reference
+and **[docs/openai-api.md](docs/openai-api.md)** for the OpenAI-compatible API reference.
 
 ## curl Example
 
@@ -136,7 +137,8 @@ curl -s -N http://localhost:8766/acp \
   -H "Acp-Connection-Id: <conn_id>" &
 ```
 
-See **[docs/http-api.md](docs/http-api.md)** for the full API reference.
+See **[docs/http-api.md](docs/http-api.md)** for the full ACP API reference
+and **[docs/openai-api.md](docs/openai-api.md)** for the OpenAI-compatible API reference.
 
 ## Architecture
 

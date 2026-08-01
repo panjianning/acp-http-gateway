@@ -65,6 +65,10 @@ async def spawn_agent(
         merged.update(env)
         env = merged
     env["PI_CODING_AGENT_DIR"] = os.path.expanduser("~/.pi/agent")
+    # Headless mode: suppress extension TUI notifications (e.g. the
+    # custom-prompt extension's ui.notify), which pi would otherwise
+    # stream into the RPC response and pollute OpenAI/SSE output.
+    env.setdefault("PI_EXT_QUIET", "1")
 
     proc = await asyncio.create_subprocess_exec(
         *cmd,

@@ -549,6 +549,10 @@ All active SSE streams for this connection will close.
 compatible endpoint on top of the ACP agent.  This lets any OpenAI SDK,
 tool, or script talk to the agent without knowing ACP.
 
+> Full reference: **[docs/openai-api.md](openai-api.md)** (request/response
+> schema, stateful sessions, OpenAI SDK examples, limitations).
+> Below is a summary.
+
 ```bash
 # Enable
 acp-http-gateway --cmd "npx pi-acp" --enable-openai

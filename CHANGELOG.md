@@ -21,6 +21,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- Suppress extension `ui.notify` output in headless agent subprocesses
+  (gateway sets `PI_EXT_QUIET=1`), preventing extension text from
+  polluting OpenAI/SSE responses.
 - CORS `Access-Control-Allow-Origin` missing on `GET /acp` SSE responses.
 - CORS `Access-Control-Expose-Headers` missing for `Acp-Connection-Id`.
 - Client `Content-Type` header bug (`{CONTENT_TYPE: CONTENT_TYPE}`).
