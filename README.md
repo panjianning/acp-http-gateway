@@ -29,7 +29,29 @@ cd acp-http-gateway
 uv sync --python /opt/homebrew/opt/python@3.12/bin/python3.12
 ```
 
-## Quick Start
+## Quick Start (Docker — 推荐)
+
+一键启动，镜像内已包含 **acp-http-gateway + pi + pi-acp**，无需安装任何依赖：
+
+```bash
+# 1. 准备模型配置（含 API Key）
+#    vim ~/.pi/agent/models.json
+
+# 2. 启动
+cp .env.example .env        # 编辑 .env 设置 ACP_BEARER_TOKEN
+curl -O https://raw.githubusercontent.com/panjianning/acp-http-gateway/main/docker-compose.yml
+docker compose up -d --build
+
+# 3. 测试
+curl http://localhost:8766/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer 你的token" \
+  -d '{"model":"deepseek/deepseek-v4-flash","messages":[{"role":"user","content":"你好"}]}'
+```
+
+详见 **[docs/QUICKSTART.md](docs/QUICKSTART.md)**。
+
+## Quick Start (源码)
 
 ```bash
 # Start the gateway with any stdio ACP agent

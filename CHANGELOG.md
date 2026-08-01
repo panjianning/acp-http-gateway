@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Docker support**: all-in-one image (acp-http-gateway + pi + pi-acp).
+  Dockerfile clones the gateway from GitHub and installs pi/pi-acp via
+  npm; no local checkout needed.  Includes docker-compose.yml (remote
+  build context), .env.example, and docs/QUICKSTART.md.
 - OpenAI Chat Completions compatibility layer:
   `POST /v1/chat/completions` (enable with `--enable-openai`).
 - Stateful multi-turn sessions via `X-ACP-Session-Id` header and

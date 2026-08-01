@@ -1,0 +1,16 @@
+# Keep the build context small and avoid leaking secrets / local state.
+.git
+.gitignore
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+dist/
+build/
+runs/
+/tmp/
+*.log
+.DS_Store
