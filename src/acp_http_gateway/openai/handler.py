@@ -149,13 +149,23 @@ async def _create_session(conn: Connection, cwd: str) -> tuple[str, str | None]:
 
 
 async def _set_model(conn: Connection, acp_session_id: str, model: str) -> None:
-    """Best-effort attempt to set the agent model (ignored on failure)."""
+    """Best-effort attempt to set the agent model (ignored on failure).
+
+    Uses the standard ACP ``session/set_config_option`` with the
+    ``model`` config id (pi-acp's ``MODEL_CONFIG_ID``), which routes to
+    pi's ``set_model`` RPC.  (``session/set_model`` is NOT a registered
+    ACP method in pi-acp.)
+    """
     req_id = 4
     body = {
         "jsonrpc": "2.0",
-        "method": "session/set_model",
+        "method": "session/set_config_option",
         "id": req_id,
-        "params": {"sessionId": acp_session_id, "modelId": model},
+        "params": {
+            "sessionId": acp_session_id,
+            "configId": "model",
+            "value": model,
+        },
     }
     await write_to_agent(conn, body)
     try:
@@ -182,7 +192,7 @@ async def _prompt(
         conn: The connection.
         acp_session_id: The ACP session id.
         text: The user prompt text.
-        model: Model hint (best-effort ``session/set_model``).
+        model: Model id; switches the agent via ``session/set_config_option``.
         startup_info: If set, the agent's prelude banner text.  The first
             ``agent_message_chunk`` matching it is dropped (pi-acp emits
             its startup banner as the first agent message of a new

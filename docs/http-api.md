@@ -575,7 +575,7 @@ acp-http-gateway --cmd "npx pi-acp" --enable-openai
 | Field        | Required | Notes                                          |
 |--------------|----------|------------------------------------------------|
 | `messages`   | **Yes**  | Array of `{role, content}`.  Last user message becomes the prompt. |
-| `model`      | No       | Echoed back; best-effort `session/set_model`.  |
+| `model`      | No       | Echoed back; switches the agent model via `session/set_config_option`.  |
 | `stream`     | No       | `true` returns OpenAI SSE chunks.              |
 | `session_id` | No       | Reuse an existing session (from `X-ACP-Session-Id`). |
 

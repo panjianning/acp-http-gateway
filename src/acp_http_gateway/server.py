@@ -244,7 +244,7 @@ def create_app(
             "session/prompt",
             "session/cancel",
             "session/set_mode",
-            "session/set_model",
+            "session/set_config_option",
         }
         if method in session_methods:
             session_id = request.headers.get(HEADER_SESSION_ID) or body.get(

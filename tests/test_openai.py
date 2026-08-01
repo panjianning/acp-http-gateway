@@ -46,7 +46,7 @@ for line in sys.stdin:
         send({"jsonrpc":"2.0","method":"session/update","params":{"sessionId":sid,"update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":BANNER}}}})
         send({"jsonrpc":"2.0","method":"session/update","params":{"sessionId":sid,"update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"Reply to: " + first}}}})
         send({"jsonrpc":"2.0","id":req["id"],"result":{"sessionId":sid,"stopReason":"end_turn"}})
-    elif method == "session/set_model":
+    elif method == "session/set_config_option":
         send({"jsonrpc":"2.0","id":req["id"],"result":{}})
     else:
         send({"jsonrpc":"2.0","id":req["id"],"result":{}})

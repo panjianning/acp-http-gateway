@@ -57,7 +57,7 @@ Base URL for OpenAI SDKs: `http://localhost:8766/v1`
 | Field        | Required | Type    | Notes                                              |
 |--------------|----------|---------|----------------------------------------------------|
 | `messages`   | **Yes**  | array   | Array of `{role, content}`. The **last user message** becomes the prompt sent to the agent. |
-| `model`      | No       | string  | Echoed back in the response; best-effort `session/set_model` on the agent. |
+| `model`      | No       | string  | Echoed back; switches the agent model via `session/set_config_option`. |
 | `stream`     | No       | boolean | `true` → SSE chunk stream; `false` (default) → single JSON. |
 | `session_id` | No       | string  | Reuse a session obtained from the `X-ACP-Session-Id` response header. |
 
