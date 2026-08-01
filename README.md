@@ -31,25 +31,22 @@ uv sync --python /opt/homebrew/opt/python@3.12/bin/python3.12
 
 ## Quick Start (Docker — 推荐)
 
-一键启动，镜像内已包含 **acp-http-gateway + pi + pi-acp**，无需安装任何依赖：
+一键启动，镜像内已包含 **acp-http-gateway + pi + pi-acp**，无需安装任何依赖。
+镜像由 GitHub Actions 自动构建（多架构），托管在
+`ghcr.io/panjianning/acp-http-gateway`：
 
 ```bash
-# 1. 构建镜像（自动从 GitHub clone 代码并安装 pi/pi-acp）
-docker build -t acp-http-gateway:latest \
-  https://github.com/panjianning/acp-http-gateway.git
-
-# 2. 准备模型配置（含 API Key）
+# 1. 准备模型配置（含 API Key）
 #    vim ~/.pi/agent/models.json
 
-# 3. 启动
-#    镜像内已内置 --enable-openai，Bearer token 通过环境变量注入
+# 2. 启动（直接 pull，不用自己构建）
 docker run -d --name acp-http-gateway \
   -p 8766:8766 \
   -e ACP_BEARER_TOKEN=你的token \
   -v ~/.pi/agent:/root/.pi/agent \
-  acp-http-gateway:latest
+  ghcr.io/panjianning/acp-http-gateway:latest
 
-# 4. 测试
+# 3. 测试
 curl http://localhost:8766/v1/chat/completions \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer 你的token" \

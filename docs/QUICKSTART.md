@@ -2,13 +2,37 @@
 
 一条命令启动 **OpenAI 兼容 API**，由 pi agent 驱动。镜像里已包含 **acp-http-gateway + pi + pi-acp**，不需要安装 Node / Python / npm / uv，也不需要 clone 代码。
 
-## 1. 构建镜像
+镜像由 GitHub Actions 自动构建（多架构 linux/amd64 + linux/arm64），托管在 GitHub Container Registry：
+
+```
+ghcr.io/panjianning/acp-http-gateway:latest
+```
+
+## 1. 启动（pull 或 build）
+
+### 方式 A：直接 pull（推荐，不用自己构建）
+
+```bash
+docker pull ghcr.io/panjianning/acp-http-gateway:latest
+
+docker run -d --name acp-http-gateway \
+  -p 8766:8766 \
+  -e ACP_BEARER_TOKEN=你的访问令牌 \
+  -v ~/.pi/agent:/root/.pi/agent \
+  ghcr.io/panjianning/acp-http-gateway:latest
+```
+
+### 方式 B：自己构建
 
 ```bash
 docker build -t acp-http-gateway:latest https://github.com/panjianning/acp-http-gateway.git
-```
 
-> Dockerfile 会自动从 GitHub clone 代码并安装 pi / pi-acp，无需本地仓库。
+docker run -d --name acp-http-gateway \
+  -p 8766:8766 \
+  -e ACP_BEARER_TOKEN=你的访问令牌 \
+  -v ~/.pi/agent:/root/.pi/agent \
+  acp-http-gateway:latest
+```
 
 ## 2. 准备模型配置
 
@@ -34,7 +58,7 @@ EOF
 
 > `apiKey` 只会被容器内的 pi 使用，不会进镜像。
 
-## 3. 启动
+## 3. 运行容器
 
 ```bash
 docker run -d --name acp-http-gateway \

@@ -13,6 +13,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   Dockerfile clones the gateway from GitHub and installs pi/pi-acp via
   npm; no local checkout needed.  Includes .env.example and
   docs/QUICKSTART.md.
+- **GitHub Actions**: automatic multi-arch image build (linux/amd64 +
+  linux/arm64) pushed to ghcr.io on push/tag/manual; package auto-made
+  public.
 - OpenAI Chat Completions compatibility layer:
   `POST /v1/chat/completions` (enable with `--enable-openai`).
 - Stateful multi-turn sessions via `X-ACP-Session-Id` header and
