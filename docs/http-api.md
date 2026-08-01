@@ -562,7 +562,7 @@ acp-http-gateway --cmd "npx pi-acp" --enable-openai
 
 ```json
 {
-  "model": "huya/deepseek/deepseek-v4-pro",
+  "model": "example/deepseek-v4-pro",
   "messages": [
     {"role": "system", "content": "You are helpful."},
     {"role": "user", "content": "Hello"}
@@ -586,7 +586,7 @@ acp-http-gateway --cmd "npx pi-acp" --enable-openai
   "id": "chatcmpl-xxx",
   "object": "chat.completion",
   "created": 1785553150,
-  "model": "huya/deepseek/deepseek-v4-pro",
+  "model": "example/deepseek-v4-pro",
   "choices": [{
     "index": 0,
     "message": {"role": "assistant", "content": "..."},

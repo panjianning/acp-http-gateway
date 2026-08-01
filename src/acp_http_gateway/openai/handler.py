@@ -170,7 +170,7 @@ async def _set_model(conn: Connection, acp_session_id: str, model: str) -> None:
     Args:
         conn: The connection.
         acp_session_id: The ACP session id.
-        model: The model id (e.g. ``huya/deepseek/deepseek-v4-pro``).
+        model: The model id (e.g. ``example/deepseek-v4-pro``).
 
     Raises:
         ModelNotFoundError: If the agent rejects the model id.

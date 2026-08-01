@@ -42,7 +42,7 @@ Base URL for OpenAI SDKs: `http://localhost:8766/v1`
 
 ```json
 {
-  "model": "huya/deepseek/deepseek-v4-pro",
+  "model": "example/deepseek-v4-pro",
   "messages": [
     {"role": "system", "content": "You are a helpful assistant."},
     {"role": "user", "content": "Hello, who are you?"}
@@ -84,7 +84,7 @@ are **ignored** — the agent controls its own sampling and toolchain.
   "id": "chatcmpl-f249d76a64524f60903ce155",
   "object": "chat.completion",
   "created": 1785553150,
-  "model": "huya/deepseek/deepseek-v4-pro",
+  "model": "example/deepseek-v4-pro",
   "choices": [
     {
       "index": 0,
@@ -191,14 +191,14 @@ client = OpenAI(base_url="http://localhost:8766/v1", api_key="dummy")
 
 # Non-streaming
 resp = client.chat.completions.create(
-    model="huya/deepseek/deepseek-v4-pro",
+    model="example/deepseek-v4-pro",
     messages=[{"role": "user", "content": "Hello"}],
 )
 print(resp.choices[0].message.content)
 
 # Streaming
 stream = client.chat.completions.create(
-    model="huya/deepseek/deepseek-v4-pro",
+    model="example/deepseek-v4-pro",
     messages=[{"role": "user", "content": "Hello"}],
     stream=True,
 )
@@ -223,7 +223,7 @@ BASE=http://localhost:8766
 curl -s $BASE/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "huya/deepseek/deepseek-v4-pro",
+    "model": "example/deepseek-v4-pro",
     "messages": [{"role": "user", "content": "你好"}]
   }'
 

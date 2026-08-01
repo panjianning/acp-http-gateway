@@ -108,7 +108,7 @@ while the underlying agent keeps its own session state:
 curl -s http://localhost:8766/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "huya/deepseek/deepseek-v4-pro",
+    "model": "example/deepseek-v4-pro",
     "messages": [{"role": "user", "content": "你好"}]
   }'
 
@@ -116,7 +116,7 @@ curl -s http://localhost:8766/v1/chat/completions \
 curl -s -N http://localhost:8766/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "huya/deepseek/deepseek-v4-pro",
+    "model": "example/deepseek-v4-pro",
     "messages": [{"role": "user", "content": "你好"}],
     "stream": true
   }'

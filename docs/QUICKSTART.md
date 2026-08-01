@@ -18,10 +18,10 @@ pi 从 `~/.pi/agent/models.json` 读取模型提供商和 API Key。**先创建�
 mkdir -p ~/.pi/agent && cat > ~/.pi/agent/models.json << 'EOF'
 {
   "providers": {
-    "huya": {
-      "baseUrl": "https://copilot.huya.info/api/openai/v1",
+    "example": {
+      "baseUrl": "https://api.example.com/v1",
       "api": "openai-completions",
-      "apiKey": "sk-你的KEY",
+      "apiKey": "sk-your-api-key",
       "models": [
         { "id": "deepseek/deepseek-v4-pro",   "name": "deepseek/deepseek-v4-pro",   "reasoning": true, "input": ["text"], "contextWindow": 1000000, "maxTokens": 32000 },
         { "id": "deepseek/deepseek-v4-flash", "name": "deepseek/deepseek-v4-flash", "reasoning": true, "input": ["text"], "contextWindow": 1000000, "maxTokens": 32000 }

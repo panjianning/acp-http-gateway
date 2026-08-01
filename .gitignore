@@ -33,6 +33,7 @@ htmlcov/
 
 # Type checking
 .mypy_cache/
+.ruff_cache/
 
 # Runs / temp
 /tmp/
