@@ -45,6 +45,10 @@ HEADER_SESSION_ID = "X-ACP-Session-Id"
 PROMPT_TIMEOUT = 300.0
 
 
+class ModelNotFoundError(RuntimeError):
+    """Raised when the requested model cannot be set on the agent."""
+
+
 async def _spawn_pooled_connection(
     cmd: list[str],
     env: dict[str, str] | None,
@@ -149,12 +153,21 @@ async def _create_session(conn: Connection, cwd: str) -> tuple[str, str | None]:
 
 
 async def _set_model(conn: Connection, acp_session_id: str, model: str) -> None:
-    """Best-effort attempt to set the agent model (ignored on failure).
+    """Set the agent model via ``session/set_config_option``.
 
-    Uses the standard ACP ``session/set_config_option`` with the
-    ``model`` config id (pi-acp's ``MODEL_CONFIG_ID``), which routes to
-    pi's ``set_model`` RPC.  (``session/set_model`` is NOT a registered
-    ACP method in pi-acp.)
+    Uses the standard ACP config option with the ``model`` id
+    (pi-acp's ``MODEL_CONFIG_ID``), which routes to pi's ``set_model``
+    RPC.  (``session/set_model`` is NOT a registered ACP method in
+    pi-acp.)
+
+    Args:
+        conn: The connection.
+        acp_session_id: The ACP session id.
+        model: The model id (e.g. ``huya/deepseek/deepseek-v4-pro``).
+
+    Raises:
+        ModelNotFoundError: If the agent rejects the model id.
+        RuntimeError: If the agent does not respond in time.
     """
     req_id = 4
     body = {
@@ -169,9 +182,18 @@ async def _set_model(conn: Connection, acp_session_id: str, model: str) -> None:
     }
     await write_to_agent(conn, body)
     try:
-        await _read_conn_queue(conn, req_id, timeout=10.0)
-    except Exception:
-        logger.debug("set_model failed (ignored): %s", model)
+        msg = await _read_conn_queue(conn, req_id, timeout=10.0)
+    except asyncio.TimeoutError as exc:
+        raise RuntimeError(
+            "Agent did not respond to set_config_option in time"
+        ) from exc
+
+    if "error" in msg:
+        err = msg.get("error", {})
+        detail = (
+            err.get("message", "unknown error") if isinstance(err, dict) else str(err)
+        )
+        raise ModelNotFoundError(f"model '{model}' rejected by agent: {detail}")
 
 
 async def _prompt(
@@ -384,6 +406,12 @@ def make_openai_handler(
             )
             headers = {HEADER_SESSION_ID: session_id}
             return web.json_response(resp, headers=headers)
+        except ModelNotFoundError as exc:
+            # OpenAI returns 404 for unknown models.
+            return web.json_response(
+                make_error(str(exc), "model_not_found"),
+                status=404,
+            )
         except Exception as exc:
             logger.exception("Prompt failed")
             return web.json_response(

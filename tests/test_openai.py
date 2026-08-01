@@ -47,7 +47,11 @@ for line in sys.stdin:
         send({"jsonrpc":"2.0","method":"session/update","params":{"sessionId":sid,"update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"Reply to: " + first}}}})
         send({"jsonrpc":"2.0","id":req["id"],"result":{"sessionId":sid,"stopReason":"end_turn"}})
     elif method == "session/set_config_option":
-        send({"jsonrpc":"2.0","id":req["id"],"result":{}})
+        value = req["params"].get("value", "")
+        if value == "bad-model":
+            send({"jsonrpc":"2.0","id":req["id"],"error":{"code":-32602,"message":"Unknown modelId: bad-model"}})
+        else:
+            send({"jsonrpc":"2.0","id":req["id"],"result":{}})
     else:
         send({"jsonrpc":"2.0","id":req["id"],"result":{}})
 """
@@ -212,3 +216,19 @@ async def test_openai_missing_messages(openai_base_url, session):
         assert resp.status == 400
         data = await resp.json()
         assert "error" in data
+
+
+@pytest.mark.asyncio
+async def test_openai_unknown_model_404(openai_base_url, session):
+    """Unknown model returns 404 with an OpenAI-style error."""
+    body = {
+        "model": "bad-model",
+        "messages": [{"role": "user", "content": "hi"}],
+    }
+    async with session.post(
+        f"{openai_base_url}/v1/chat/completions", json=body
+    ) as resp:
+        assert resp.status == 404
+        data = await resp.json()
+        assert data["error"]["code"] == "model_not_found"
+        assert "bad-model" in data["error"]["message"]
