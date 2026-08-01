@@ -23,6 +23,7 @@ Provides the ``/acp`` endpoint that handles:
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from typing import Any
 
@@ -55,11 +56,29 @@ VALID_CONTENT_TYPE = "application/json"
 VALID_ACCEPT = "text/event-stream"
 
 
+def _json_dumps(data: Any) -> str:
+    """Serialize JSON without escaping non-ASCII characters.
+
+    aiohttp's ``json_response`` defaults to ``json.dumps`` which escapes
+    non-ASCII (``ensure_ascii=True``), turning Chinese text into
+    ``\\uXXXX`` sequences.  Pass this as ``dumps=`` to every JSON
+    response so UTF-8 text is preserved on the wire.
+
+    Args:
+        data: The JSON-serializable value.
+
+    Returns:
+        A UTF-8 JSON string.
+    """
+    return json.dumps(data, ensure_ascii=False)
+
+
 def _bad_request(reason: str) -> web.Response:
     """Return a 400 response with a JSON error body."""
     return web.json_response(
         {"error": reason},
         status=400,
+        dumps=_json_dumps,
     )
 
 
@@ -68,6 +87,7 @@ def _not_found(reason: str) -> web.Response:
     return web.json_response(
         {"error": reason},
         status=404,
+        dumps=_json_dumps,
     )
 
 
@@ -76,6 +96,7 @@ def _unauthorized(reason: str = "Authentication required") -> web.Response:
     return web.json_response(
         {"error": reason},
         status=401,
+        dumps=_json_dumps,
     )
 
 
@@ -195,6 +216,7 @@ def create_app(
                 return web.json_response(
                     {"error": "Server at capacity — try again later"},
                     status=503,
+                    dumps=_json_dumps,
                 )
 
             async with semaphore:
@@ -209,6 +231,7 @@ def create_app(
                     return web.json_response(
                         {"error": str(exc)},
                         status=502,
+                        dumps=_json_dumps,
                     )
 
                 # Start background stdout router AFTER handshake
@@ -230,7 +253,9 @@ def create_app(
                         f"{HEADER_CONNECTION_ID}, {HEADER_SESSION_ID}"
                     )
 
-            return web.json_response(response, status=200, headers=headers)
+            return web.json_response(
+                response, status=200, headers=headers, dumps=_json_dumps
+            )
 
         # ── All other POST methods (require Acp-Connection-Id) ──────
         conn, source = _resolve_connection(store, request)
@@ -377,7 +402,8 @@ def create_app(
             {
                 "status": "ok",
                 "connections": store.count,
-            }
+            },
+            dumps=_json_dumps,
         )
 
     app.router.add_get("/health", _health)

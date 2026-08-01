@@ -21,6 +21,7 @@ existing connection/bridge infrastructure.  Sessions are pooled by
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from typing import Any
 
@@ -47,6 +48,11 @@ PROMPT_TIMEOUT = 300.0
 
 class ModelNotFoundError(RuntimeError):
     """Raised when the requested model cannot be set on the agent."""
+
+
+def _json_dumps(data: Any) -> str:
+    """Serialize JSON without escaping non-ASCII characters (UTF-8)."""
+    return json.dumps(data, ensure_ascii=False)
 
 
 async def _spawn_pooled_connection(
@@ -342,6 +348,7 @@ def make_openai_handler(
             return web.json_response(
                 make_error("Invalid JSON body", "invalid_request"),
                 status=400,
+                dumps=_json_dumps,
             )
 
         try:
@@ -350,6 +357,7 @@ def make_openai_handler(
             return web.json_response(
                 make_error(str(exc), "invalid_request"),
                 status=400,
+                dumps=_json_dumps,
             )
 
         messages = req["messages"]
@@ -372,6 +380,7 @@ def make_openai_handler(
                 return web.json_response(
                     make_error(f"Failed to create session: {exc}"),
                     status=502,
+                    dumps=_json_dumps,
                 )
 
         try:
@@ -380,6 +389,7 @@ def make_openai_handler(
                 return web.json_response(
                     make_error("No user message found", "invalid_request"),
                     status=400,
+                    dumps=_json_dumps,
                 )
 
             result = await _prompt(
@@ -405,18 +415,20 @@ def make_openai_handler(
                 finish_reason=_map_stop(result["stop_reason"]),
             )
             headers = {HEADER_SESSION_ID: session_id}
-            return web.json_response(resp, headers=headers)
+            return web.json_response(resp, headers=headers, dumps=_json_dumps)
         except ModelNotFoundError as exc:
             # OpenAI returns 404 for unknown models.
             return web.json_response(
                 make_error(str(exc), "model_not_found"),
                 status=404,
+                dumps=_json_dumps,
             )
         except Exception as exc:
             logger.exception("Prompt failed")
             return web.json_response(
                 make_error(f"Prompt failed: {exc}"),
                 status=502,
+                dumps=_json_dumps,
             )
 
     return _handle
